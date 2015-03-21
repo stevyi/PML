@@ -1,0 +1,133 @@
+---
+title: "Practical Machine Learning: Project Write-up"
+output:
+  html_document
+    
+---
+## Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+### Preparing the environment
+Load all libraries to be used throughout the project.
+```{r, warning=F, message=F}
+library(caret)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+library(kernlab)
+library(knitr)
+library(randomForest)
+```
+```{r setoptions, echo = F}
+opts_chunk$set(cache = F)
+```
+
+### Downloading and preprocessing the data
+At first, 2 csv files contatining the training and test data was downloaded into the working directory. 
+
+```{r, eval = FALSE}
+# Check the existing of a data folder, create one if otherwise
+if (!file.exists("./data")) {dir.create("./data")}
+
+# Save the URL file and destination file
+trainingurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+trainingraw <- "./data/pml-training.csv"
+testingurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testingraw <- "./data/pml-testing.csv"
+
+# Download the training and testing URL files
+download.file(trainingurl, destfile = trainingraw)
+download.file(testingurl, destfile = testingraw)
+```
+
+The training data was then loaded into R
+
+```{r}
+# Read the training data from csv file
+trainingData <- read.csv("./data/pml-training.csv", na.strings= c("NA",""," "))
+dim(trainingData)
+```
+
+### Data exploration and cleaning
+There was a lot of NA values in the raw data which could be noises for the modeling and there were removed as part of data cleaning.
+
+```{r}
+# Clean up the data by removing columns with NAs
+trainingRawData <- apply(trainingData, 2, function(x) {sum(is.na(x))})
+trainingCleanedData <- trainingData[,which(trainingRawData == 0)]
+
+# Remove identifier columns such as name, timestamps etc
+trainingCleanedData <- trainingCleanedData[8:length(trainingCleanedData)]
+```
+
+### Data modeling
+The test data set was split up into training and cross validation sets in a 70:30 ratio.
+
+```{r}
+# split the cleaned testing data into training and cross validation
+inTrainingData <- createDataPartition(y = trainingCleanedData$classe, p = 0.7, list = FALSE)
+trainingData <- trainingCleanedData[inTrainingData, ]
+XValidation <- trainingCleanedData[-inTrainingData, ]
+```
+
+A random forest model was selected to predict the classification as it is the best method for balancing error in class population unbalanced data sets. A correllation plot was produced to observe variables and their relationships with each other.
+
+```{r, fig.height = 9, fig.width = 9}
+# Plot a correlation matrix
+correlateMatrix <- cor(trainingData[, -length(trainingData)])
+corrplot(correlateMatrix, order = "FPC", method = "square", tl.cex = 0.8,  tl.col = rgb(0, 0, 0))
+```
+
+In the correlation matrix plot, the dark red and blue colours indicate a highly negative and positive relationship respectively between the variables. It is believed to be the best fit for the highly correlated predictions with all of the training data included in the model.
+
+```{r, fig.height = 9, fig.width = 9}
+# Plot a decision tree
+treeModel <- rpart(classe ~ ., data=trainingData, method="class")
+prp(treeModel)
+```
+
+In the decision tree plot, you can visulise the correlations and predictions among classification with all of the training data.
+
+```{r}
+# Use the best fit model to predict the classe
+model <- randomForest(classe ~ ., data = trainingData)
+model
+```
+
+The random forest model produced a very small OOB error rate of 0.56% for the training data which was deemed to be suitable for the evaluation on the testing data.
+
+### Cross-validation
+The model was used to classify the remaining 30% of data. The results were placed in a confusion matrix and statistics along with the actual classifications in order to determine the accuracy of the model.
+
+```{r}
+# Cross-validation the model using the remaining 30% of data
+predictXValidation <- predict(model, XValidation)
+confusionMatrix(XValidation$classe, predictXValidation)
+```
+
+This model yielded a 99.3% prediction accuracy and proved to be very robust and adequete to predict new data.
+
+### Predictions on testing data
+A separate data set was loaded into R and cleaned in the same treatment as previously perfromed. This model was used to predict the classifications of the 20 results of these new data.
+
+```{r}
+# Apply the same treatment process to the final testing data
+testingData <- read.csv("./data/pml-testing.csv", na.strings= c("NA",""," "))
+dim(testingData)
+testingRawData <- apply(testingData, 2, function(x) {sum(is.na(x))})
+testingCleanedData <- testingData[,which(testingRawData == 0)]
+testingCleanedData <- testingCleanedData[8:length(testingCleanedData)]
+```
+
+Perform predictitive model on the testing data for 20 different test cases as required by the project
+
+```{r}
+# Prediction model to predict 20 different test cases and results
+predictTest <- predict(model, testingCleanedData)
+predictTest
+```
+
+## Conclusions
+In summary, it is possible to predict accurately how well a person is preforming an excercise using a relatively simple random forest model. 
